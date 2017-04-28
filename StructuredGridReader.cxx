@@ -49,13 +49,16 @@ int main()
   // Find the range of the point scalars
   
   std::cout << "output has " << polydata->GetNumberOfPoints() << " points." << std::endl;
-  double range [2];
-  polydata->GetPointData()->GetScalars()->GetRange(range, -1);
-  cout << range [0] << "  " << range[1] << endl;
-
+ 
+  double range[2];
+  reader->GetOutput()->GetScalarRange(range);
+ 
+  cout << "Min value in scalar range: " << range[0] << endl;
+  cout << "Max value in scalar range: " << range[1] << endl;
+ 
   std::vector<vtkSmartPointer<vtkAlgorithmOutput>> data;
   data.push_back(reader->GetOutputPort());
-
+	  
   //Create a mapper and actor
   vtkSmartPointer<vtkDataSetMapper> mapper =
 	  vtkSmartPointer<vtkDataSetMapper>::New();
