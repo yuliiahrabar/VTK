@@ -18,9 +18,11 @@
 #include <vtkPoints.h>
 #include <vtkPointData.h>
 #include <vtkFieldData.h>
+#include <vtkFloatArray.h>
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
+#include <string>
 
 
 template <typename T>
@@ -71,11 +73,6 @@ void MakeCellData(size_t const & tableSize, vtkLookupTable *lut, vtkUnsignedChar
 	{
 		double rgb[3];
 		unsigned char ucrgb[3];
-		// Get the interpolated color.
-		// Of course you can use any function whose range is [0...1]
-		// to get the required color and assign it to a cell Id.
-		// In this case we are just using the cell (Id + 1)/(tableSize - 1)
-		// to get the interpolated color.
 
 		//lut->GetColor(static_cast<double>(i) / (tableSize - 1), rgb);
 		lut->GetColor(abs(static_cast<double>(i)) / tableSize, rgb);
@@ -93,6 +90,59 @@ void MakeCellData(size_t const & tableSize, vtkLookupTable *lut, vtkUnsignedChar
 		std::cout << ")" << std::endl;*/
 	}
 }
+
+void MakeLUTFromCTF12(double scaleRange, int numberOfColors, vtkLookupTable *lut)
+{
+	vtkSmartPointer<vtkColorTransferFunction> ctf =
+		vtkSmartPointer<vtkColorTransferFunction>::New();
+	ctf->SetColorSpaceToDiverging();
+	cout << "Range: " << scaleRange << endl;
+	//// Green to tan.
+	//ctf->AddRGBPoint(0.0, 0.085, 0.532, 0.201);
+	//ctf->AddRGBPoint(0.5, 0.865, 0.865, 0.865);
+	//ctf->AddRGBPoint(1.0, 0.677, 0.492, 0.093);
+
+	//Blue to red
+	ctf->AddRGBPoint(0.0, 0.2, 0.1, 0.9);
+	ctf->AddRGBPoint(0.5, 1.0, 1.0, 1.0);
+	ctf->AddRGBPoint(1.0, 0.7, 0.0, 0.0);
+
+	lut->SetNumberOfTableValues(numberOfColors);
+	lut->Build();
+	int i = 0; double k = 0;
+	while (i < numberOfColors)
+	{
+		double *rgb;
+		rgb = ctf->GetColor(k / scaleRange);
+		lut->SetTableValue(i, rgb);
+		i++; k += scaleRange / numberOfColors;
+	}
+}
+
+void MakeCellData12(size_t const & tableSize, int arr_num, vtkPolyData* polydata, vtkLookupTable *lut,
+	vtkUnsignedCharArray *colors)
+{
+	double arrayRange[2];
+	polydata->GetCellData()->GetArray(arr_num)->GetRange(arrayRange);
+	double min = arrayRange[1], max = arrayRange[0];
+	double scaleRange = max - min;
+	vtkSmartPointer<vtkFloatArray> retrievedArray = vtkFloatArray::SafeDownCast(polydata->GetCellData()->GetArray(arr_num));
+	for (int i = 0; i < tableSize; i++)
+	{
+		double rgb[3];
+		unsigned char ucrgb[3];
+		float value = retrievedArray->GetValue(i);
+		//cout << i << ": " << value << " " << static_cast<double>(value) << endl;
+		//lut->GetColor(static_cast<double>(i) / (tableSize - 1), rgb);
+		lut->GetColor((static_cast<double>(value) - min) / scaleRange, rgb);
+		for (size_t j = 0; j < 3; ++j)
+		{
+			ucrgb[j] = static_cast<unsigned char>(rgb[j] * 255);
+		}
+		colors->InsertNextTuple3(ucrgb[0], ucrgb[1], ucrgb[2]);
+	}
+}
+
 
 void FindAllData(vtkPolyData* polydata)
 {
@@ -132,6 +182,25 @@ void FindAllData(vtkPolyData* polydata)
 	}
 }
 
+void CheckArray(int arrNum, vtkPolyData* polydata)
+{
+	int tableSize = polydata->GetNumberOfCells();
+	vtkSmartPointer<vtkFloatArray> retrievedArray = vtkFloatArray::SafeDownCast(polydata->GetCellData()->GetArray(arrNum));
+	if (retrievedArray)
+	{
+		retrievedArray->Print(std::cout);
+		std::cout << "Got array " << "U"
+			<< " with " << tableSize << " values"
+			<< std::endl;
+		for (int i = 0; i < tableSize; i++)
+			std::cout << i << ": " << retrievedArray->GetValue(i) << std::endl;
+	}
+	else
+	{
+		std::cout << "The file " << " does not have array number " << arrNum << std::endl;
+	}
+}
+
 int main(int, char *[])
 {
 	vtkSmartPointer<vtkNamedColors> nc =
@@ -154,22 +223,20 @@ int main(int, char *[])
 	//polydata->ShallowCopy(reader->GetOutput());
 	polydata = reader->GetOutput();
 
-	FindAllData(polydata);
-
-	// Create a lookup table to map cell data to colors
+	//FindAllData(polydata);
+	
 	int arr_num = 11;
-	int dataTypeID = polydata->GetCellData()->GetArray(arr_num)->GetDataType();
-	std::cout << "Array " << arr_num << ": " << polydata->GetCellData()->GetArrayName(arr_num)
-		<< " (type: " << dataTypeID << ")" << std::endl;
+	std::cout << "Array " << arr_num << ": " << polydata->GetCellData()->GetArrayName(arr_num)<< std::endl;
 
 	double arrayRange[2];
 	
 	polydata->GetCellData()->GetArray(arr_num)->GetRange(arrayRange);
 	//reader->GetOutput()->GetScalarRange(arrayRange);
-	cout << "Range of values for arrays: " << arrayRange[0] << " " << arrayRange[1] << endl;
+	cout << "Range of values for arrays " << arrayRange[0] << " " << arrayRange[1] << endl;
 	
-	double scaleRange = abs(arrayRange[0]) + abs(arrayRange[1]);
-
+	double scaleRange = arrayRange[1] - arrayRange[0];
+	
+	// Create a lookup table to map cell data to colors
 	vtkSmartPointer<vtkLookupTable> lookupTable =
 		vtkSmartPointer<vtkLookupTable>::New();
 
@@ -180,25 +247,22 @@ int main(int, char *[])
 	colors->SetName("Colors");
 
 	int tableSize = polydata->GetNumberOfCells();
-
 	std::cout << "There are " << tableSize << " cells." << std::endl;
 
-	//MakeLUTFromCTF12(tableSize, scaleRange, arr_num, polydata, lookupTable);
-	MakeLUTFromCTF(tableSize,   lookupTable);
+	int numberOfColors = tableSize;
+	MakeLUTFromCTF12(scaleRange, numberOfColors, lookupTable);
+	//MakeLUTFromCTF(tableSize,   lookupTable);
+	
 	vtkSmartPointer<vtkUnsignedCharArray> colorData =
 		vtkSmartPointer<vtkUnsignedCharArray>::New();
 	colorData->SetName("colors");
 	colorData->SetNumberOfComponents(3);
-	std::cout << "Using a lookup table created from a color transfer function."
-		<< std::endl;
-	//polydata->Print(std::cout);
 
-	//MakeCellData(tableSize, scaleRange, arr_num, polydata, lookupTable, colorData);
-	MakeCellData(tableSize,  lookupTable, colorData);
+	MakeCellData12(tableSize, arr_num, polydata, lookupTable, colorData);
+	//MakeCellData(tableSize,  lookupTable, colorData);
 	
 	//polydata->GetPointData()->SetScalars(colors);
 	polydata->GetCellData()->SetScalars(colorData);
-	//polydata->Print(std::cout);
 
 	// Create a mapper and actor
 	vtkSmartPointer<vtkPolyDataMapper> mapper =
@@ -216,9 +280,11 @@ int main(int, char *[])
 	// Create a renderer, render window, and interactor
 	vtkSmartPointer<vtkRenderer> renderer =
 		vtkSmartPointer<vtkRenderer>::New();
+
 	vtkSmartPointer<vtkRenderWindow> renderWindow =
 		vtkSmartPointer<vtkRenderWindow>::New();
 	renderWindow->AddRenderer(renderer);
+	
 	vtkSmartPointer<vtkRenderWindowInteractor> renderWindowInteractor =
 		vtkSmartPointer<vtkRenderWindowInteractor>::New();
 	renderWindowInteractor->SetRenderWindow(renderWindow);
