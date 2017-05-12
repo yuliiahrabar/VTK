@@ -23,6 +23,8 @@
 #include <iomanip>
 #include <algorithm>
 #include <string>
+#include <vtkGenericDataObjectReader.h>
+#include <vtkDataSetMapper.h>
 
 
 template <typename T>
@@ -207,23 +209,20 @@ int main(int, char *[])
 		vtkSmartPointer<vtkNamedColors>::New();
 
 	std::string inputFilename = "C:/Users/YULIA/Desktop/Semestr letni/VTK_files/VTK/frac_bottom/frac_bottom_199500.vtk";
-	//std::string inputFilename = "C:/Users/YULIA/Desktop/SCFD_199500.vtk";
+	//std::string inputFilename = "C:/Users/YULIA/Desktop/CFD_199500.vtk";
 
 	// Read the file
-	vtkSmartPointer<vtkPolyDataReader> reader =
-		vtkSmartPointer<vtkPolyDataReader>::New();
+	vtkSmartPointer<vtkGenericDataObjectReader> reader =
+		vtkSmartPointer<vtkGenericDataObjectReader>::New();
 
-	/*vtkSmartPointer<vtkUnstructuredGridReader> reader =
-		vtkSmartPointer<vtkUnstructuredGridReader>::New();*/
 	reader->SetFileName(inputFilename.c_str());
 	reader->Update();
 
 	vtkSmartPointer<vtkPolyData> polydata =
 		vtkSmartPointer<vtkPolyData>::New();
-	//polydata->ShallowCopy(reader->GetOutput());
-	polydata = reader->GetOutput();
+	polydata->ShallowCopy(reader->GetOutput());
 
-	//FindAllData(polydata);
+	FindAllData(polydata);
 	
 	int arr_num = 11;
 	std::cout << "Array " << arr_num << ": " << polydata->GetCellData()->GetArrayName(arr_num)<< std::endl;
@@ -265,8 +264,8 @@ int main(int, char *[])
 	polydata->GetCellData()->SetScalars(colorData);
 
 	// Create a mapper and actor
-	vtkSmartPointer<vtkPolyDataMapper> mapper =
-		vtkSmartPointer<vtkPolyDataMapper>::New();
+	vtkSmartPointer<vtkDataSetMapper> mapper =
+		vtkSmartPointer<vtkDataSetMapper>::New();
 
 	mapper->SetInputData(polydata);
 	mapper->SetScalarRange(0, tableSize - 1);
